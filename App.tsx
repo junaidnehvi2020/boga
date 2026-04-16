@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Switch, Alert, FlatList, Platform, SafeAreaView, StatusBar, KeyboardAvoidingView } from 'react-native';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Switch, Alert, SafeAreaView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
@@ -23,7 +23,6 @@ interface Entry {
 }
 
 interface AppSettings {
-  theme: 'dark' | 'light';
   currency: Currency;
   lockEnabled: boolean;
   lockPassword: string;
@@ -46,43 +45,29 @@ const DEFAULT_ITEMS: Item[] = [
   { id: 'gas', name: 'Gas', icon: '🔥', price: 50, priceHistory: [] },
 ];
 
-const darkTheme = {
-  bg: '#0F172A',
-  card: '#1E293B',
-  cardAlt: '#334155',
-  accent: '#22C55E',
-  fg: '#F8FAFC',
-  fgMuted: '#94A3B8',
-  destructive: '#EF4444',
-  success: '#22C55E',
-  warning: '#F59E0B',
-  border: '#334155',
-};
-
-const lightTheme = {
-  bg: '#F8FAFC',
-  card: '#E2E8F0',
-  cardAlt: '#CBD5E1',
-  accent: '#16A34A',
-  fg: '#0F172A',
-  fgMuted: '#64748B',
-  destructive: '#DC2626',
-  success: '#16A34A',
-  warning: '#D97706',
-  border: '#CBD5E1',
+const theme = {
+  bg: '#000000',
+  card: 'rgba(255, 255, 255, 0.04)',
+  cardBorder: 'rgba(255, 255, 255, 0.1)',
+  cardAlt: 'rgba(255, 255, 255, 0.08)',
+  accent: '#007AFF',
+  fg: '#FFFFFF',
+  fgMuted: 'rgba(255, 255, 255, 0.55)',
+  destructive: '#FF3B30',
+  success: '#34C759',
+  warning: '#FF9500',
 };
 
 export default function App() {
   const [items, setItems] = useState<Item[]>(DEFAULT_ITEMS);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
-    theme: 'dark',
     currency: 'SAR',
     lockEnabled: false,
     lockPassword: '',
   });
   
-  const [mode, setMode] = useState<'main' | 'settings' | 'addItem' | 'report' | 'export'>('main');
+  const [mode, setMode] = useState<'main' | 'settings' | 'addItem'>('main');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
@@ -106,7 +91,6 @@ export default function App() {
   const [customPriceAmount, setCustomPriceAmount] = useState('');
   const [newItemIsCustom, setNewItemIsCustom] = useState(false);
 
-  const theme = settings.theme === 'dark' ? darkTheme : lightTheme;
   const currencySymbol = CURRENCIES.find(c => c.code === settings.currency)?.symbol || 'ر.س';
 
   const getPriceAtTime = useCallback((item: Item, timestamp: number): number => {
@@ -204,8 +188,9 @@ export default function App() {
   }, [entries, selectedMonth, selectedYear]);
 
   const togglePaid = useCallback((entryId: string) => {
+    triggerHaptic();
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, paid: !e.paid } : e));
-  }, []);
+  }, [triggerHaptic]);
 
   const toggleSelectEntry = useCallback((entryId: string) => {
     lightHaptic();
@@ -305,10 +290,6 @@ export default function App() {
     setShowReportModal(false);
   }, [reportStartDate, reportEndDate, entries, items, settings.currency, currencySymbol]);
 
-  const handleImport = useCallback(() => {
-    Alert.alert('Import', 'To import: Place a CSV file in your device storage and the app will parse it. Use format: Date,ItemName,Price,Currency,Paid');
-  }, []);
-
   const filteredEntries = useMemo(() => {
     return entries.filter(e => {
       const d = new Date(e.timestamp);
@@ -337,34 +318,38 @@ export default function App() {
     }).filter(r => r.count > 0);
   }, [reportStartDate, reportEndDate, entries, items]);
 
+  const AmountDisplay = ({ amount, color }: { amount: number; color: string }) => (
+    <View style={styles.amountRow}>
+      <Text style={[styles.currencySymbol, { color }]}>{currencySymbol}</Text>
+      <Text style={[styles.amountValue, { color }]}>{amount.toFixed(2)}</Text>
+    </View>
+  );
+
   if (settings.lockEnabled && !isUnlocked) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={settings.theme === 'dark' ? 'light-content' : 'dark-content'} />
-        <View style={styles.centerScreen}>
-          <Text style={[styles.logo, { color: theme.fg }]}>🔒</Text>
-          <Text style={[styles.title, { color: theme.fg }]}>BoGa Locked</Text>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.lockScreen}>
+          <Text style={styles.lockIcon}>🔒</Text>
+          <Text style={styles.lockTitle}>BoGa</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.card, color: theme.fg, borderColor: theme.border }]}
+            style={styles.lockInput}
             placeholder="Enter password"
             placeholderTextColor={theme.fgMuted}
             value={lockInput}
             onChangeText={setLockInput}
             secureTextEntry
           />
-          <TouchableOpacity
-            style={[styles.btn, { backgroundColor: theme.accent }]}
-            onPress={() => {
-              if (lockInput === settings.lockPassword) {
-                triggerHaptic();
-                setIsUnlocked(true);
-              } else {
-                Alert.alert('Error', 'Wrong password');
-              }
-              setLockInput('');
-            }}
-          >
-            <Text style={styles.btnText}>Unlock</Text>
+          <TouchableOpacity style={styles.lockBtn} onPress={() => {
+            if (lockInput === settings.lockPassword) {
+              triggerHaptic();
+              setIsUnlocked(true);
+            } else {
+              Alert.alert('Error', 'Wrong password');
+            }
+            setLockInput('');
+          }}>
+            <Text style={styles.lockBtnText}>Unlock</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -373,29 +358,29 @@ export default function App() {
 
   if (mode === 'addItem') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={settings.theme === 'dark' ? 'light-content' : 'dark-content'} />
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setMode('main')}>
-            <Text style={[styles.backBtn, { color: theme.accent }]}>← Back</Text>
+            <Text style={styles.backBtn}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.fg }]}>Add New Item</Text>
+          <Text style={styles.headerTitle}>New Item</Text>
           <View style={{ width: 60 }} />
         </View>
         
         <KeyboardAvoidingView behavior="padding" style={styles.content}>
-          <Text style={[styles.label, { color: theme.fg }]}>Item Name</Text>
+          <Text style={styles.label}>ITEM NAME</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.card, color: theme.fg, borderColor: theme.border }]}
+            style={styles.input}
             placeholder="e.g., Milk, Bread"
             placeholderTextColor={theme.fgMuted}
             value={newItemName}
             onChangeText={setNewItemName}
           />
           
-          <Text style={[styles.label, { color: theme.fg }]}>Default Price ({settings.currency})</Text>
+          <Text style={styles.label}>DEFAULT PRICE ({settings.currency})</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.card, color: theme.fg, borderColor: theme.border }]}
+            style={styles.input}
             placeholder="0.00"
             placeholderTextColor={theme.fgMuted}
             value={newItemPrice}
@@ -403,7 +388,7 @@ export default function App() {
             keyboardType="decimal-pad"
           />
           
-          <Text style={[styles.label, { color: theme.fg }]}>Icon</Text>
+          <Text style={styles.label}>ICON</Text>
           <View style={styles.iconPicker}>
             {['📦', '💧', '🔥', '🥛', '🍞', '🧴', '🧼', '✋', '🚌', '📱', '🎮', '☕'].map(icon => (
               <TouchableOpacity
@@ -416,21 +401,18 @@ export default function App() {
             ))}
           </View>
           
-          <View style={[styles.setCard, { backgroundColor: theme.card, marginTop: 12 }]}>
-            <Text style={[styles.setLabel, { color: theme.fg }]}>Custom Amount Each Time</Text>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Custom Amount Each Time</Text>
             <Switch
               value={newItemIsCustom}
               onValueChange={(val) => setNewItemIsCustom(val)}
-              trackColor={{ false: theme.fgMuted, true: theme.accent }}
+              trackColor={{ false: theme.cardAlt, true: theme.accent }}
               thumbColor="#FFF"
             />
           </View>
-          <Text style={{ color: theme.fgMuted, fontSize: 12, marginTop: 4, marginBottom: 12 }}>
-            When enabled, you'll enter amount each time you add this item
-          </Text>
           
-          <TouchableOpacity style={[styles.btn, { backgroundColor: theme.accent, marginTop: 20 }]} onPress={addNewItem}>
-            <Text style={styles.btnText}>Add Item</Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={addNewItem}>
+            <Text style={styles.primaryBtnText}>Add Item</Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -439,44 +421,33 @@ export default function App() {
 
   if (mode === 'settings') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={settings.theme === 'dark' ? 'light-content' : 'dark-content'} />
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setMode('main')}>
-            <Text style={[styles.backBtn, { color: theme.accent }]}>← Back</Text>
+            <Text style={styles.backBtn}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.fg }]}>Settings</Text>
+          <Text style={styles.headerTitle}>Settings</Text>
           <View style={{ width: 60 }} />
         </View>
         
         <ScrollView style={styles.content}>
-          <Text style={[styles.sectionTitle, { color: theme.fg }]}>Appearance</Text>
-          <View style={[styles.setCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.setLabel, { color: theme.fg }]}>Dark Mode</Text>
-            <Switch
-              value={settings.theme === 'dark'}
-              onValueChange={(val) => setSettings(s => ({ ...s, theme: val ? 'dark' : 'light' }))}
-              trackColor={{ false: theme.fgMuted, true: theme.accent }}
-              thumbColor="#FFF"
-            />
-          </View>
-          
-          <Text style={[styles.sectionTitle, { color: theme.fg }]}>Currency</Text>
-          <View style={styles.chipRow}>
+          <Text style={styles.sectionTitle}>CURRENCY</Text>
+          <View style={styles.currencyRow}>
             {CURRENCIES.map(c => (
               <TouchableOpacity
                 key={c.code}
-                style={[styles.chip, settings.currency === c.code && { backgroundColor: theme.accent }]}
+                style={[styles.currencyChip, settings.currency === c.code && { backgroundColor: theme.accent }]}
                 onPress={() => { lightHaptic(); setSettings(s => ({ ...s, currency: c.code })); }}
               >
-                <Text style={[styles.chipText, { color: settings.currency === c.code ? '#FFF' : theme.fg }]}>{c.symbol} {c.code}</Text>
+                <Text style={[styles.currencyChipText, { color: settings.currency === c.code ? '#FFF' : theme.fg }]}>{c.symbol} {c.code}</Text>
               </TouchableOpacity>
             ))}
           </View>
           
-          <Text style={[styles.sectionTitle, { color: theme.fg }]}>Security</Text>
-          <View style={[styles.setCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.setLabel, { color: theme.fg }]}>Lock Screen</Text>
+          <Text style={styles.sectionTitle}>SECURITY</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>Lock Screen</Text>
             <Switch
               value={settings.lockEnabled}
               onValueChange={(val) => {
@@ -488,64 +459,62 @@ export default function App() {
                   setSettings(s => ({ ...s, lockEnabled: false, lockPassword: '' }));
                 }
               }}
-              trackColor={{ false: theme.fgMuted, true: theme.accent }}
+              trackColor={{ false: theme.cardAlt, true: theme.accent }}
               thumbColor="#FFF"
             />
           </View>
           
-          <Text style={[styles.sectionTitle, { color: theme.fg }]}>Data</Text>
-          <TouchableOpacity style={[styles.setCard, { backgroundColor: theme.card }]} onPress={() => setShowReportModal(true)}>
-            <Text style={[styles.setLabel, { color: theme.fg }]}>📊 Export / Report</Text>
+          <Text style={styles.sectionTitle}>DATA</Text>
+          <TouchableOpacity style={styles.card} onPress={() => setShowReportModal(true)}>
+            <Text style={styles.cardLabel}>📊 Export / Report</Text>
           </TouchableOpacity>
           
-          <Text style={[styles.sectionTitle, { color: theme.fg }]}>Manage Items</Text>
+          <Text style={styles.sectionTitle}>MANAGE ITEMS</Text>
           {items.map(item => (
-            <View key={item.id} style={[styles.setCard, { backgroundColor: theme.card }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                <Text style={{ fontSize: 20, marginRight: 10 }}>{item.icon}</Text>
-                <View>
-                  <Text style={[styles.setLabel, { color: theme.fg }]}>{item.name}</Text>
-                  <Text style={[styles.setLabelSmall, { color: theme.fgMuted }]}>{currencySymbol}{item.price}</Text>
+            <View key={item.id} style={styles.card}>
+              <View style={styles.cardRow}>
+                <Text style={styles.itemIcon}>{item.icon}</Text>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <AmountDisplay amount={item.price} color={theme.fgMuted} />
                 </View>
               </View>
               <TouchableOpacity onPress={() => openItemEditor(item)}>
-                <Text style={{ color: theme.accent, fontSize: 14 }}>Edit Price</Text>
+                <Text style={styles.editLink}>Edit</Text>
               </TouchableOpacity>
             </View>
           ))}
           
-          <TouchableOpacity style={[styles.btn, { backgroundColor: theme.cardAlt, marginTop: 10 }]} onPress={() => setMode('addItem')}>
-            <Text style={[styles.btnText, { color: theme.fg }]}>+ Add New Item</Text>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setMode('addItem')}>
+            <Text style={styles.secondaryBtnText}>+ Add New Item</Text>
           </TouchableOpacity>
         </ScrollView>
         
-        {/* Price Editor Modal */}
         <Modal visible={showItemEditor} transparent animationType="slide">
           <Pressable style={styles.overlay} onPress={() => setShowItemEditor(false)}>
-            <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-              <Text style={[styles.modalTitle, { color: theme.fg }]}>Edit Price</Text>
+            <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+              <Text style={styles.modalTitle}>Edit Price</Text>
               {editingItem && (
                 <>
-                  <Text style={{ color: theme.fgMuted, marginBottom: 15 }}>{editingItem.icon} {editingItem.name}</Text>
-                  <Text style={[styles.label, { color: theme.fg }]}>New Price ({settings.currency})</Text>
+                  <Text style={styles.modalSubtitle}>{editingItem.icon} {editingItem.name}</Text>
+                  <Text style={styles.label}>NEW PRICE ({settings.currency})</Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg }]}
+                    style={styles.input}
                     value={newItemPrice}
                     onChangeText={setNewItemPrice}
                     keyboardType="decimal-pad"
                   />
-                  <Text style={[styles.label, { color: theme.fg }]}>Effective From</Text>
+                  <Text style={styles.label}>EFFECTIVE FROM</Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg }]}
+                    style={styles.input}
                     value={priceChangeDate}
                     onChangeText={setPriceChangeDate}
                     placeholder="YYYY-MM-DD"
+                    placeholderTextColor={theme.fgMuted}
                   />
-                  <Text style={{ color: theme.fgMuted, fontSize: 12, marginBottom: 15 }}>
-                    Entries before this date keep old price
-                  </Text>
-                  <TouchableOpacity style={[styles.btn, { backgroundColor: theme.accent }]} onPress={updateItemPrice}>
-                    <Text style={styles.btnText}>Save Change</Text>
+                  <Text style={styles.helperText}>Entries before this date keep old price</Text>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={updateItemPrice}>
+                    <Text style={styles.primaryBtnText}>Save Change</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -553,34 +522,33 @@ export default function App() {
           </Pressable>
         </Modal>
         
-        {/* Report/Export Modal */}
         <Modal visible={showReportModal} transparent animationType="slide">
           <Pressable style={styles.overlay} onPress={() => setShowReportModal(false)}>
-            <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-              <Text style={[styles.modalTitle, { color: theme.fg }]}>Report & Export</Text>
-              <Text style={[styles.label, { color: theme.fg }]}>Quick Ranges</Text>
-              <View style={styles.chipRow}>
-                <TouchableOpacity style={styles.chip} onPress={() => { const d = new Date(); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(d.toISOString().split('T')[0]); }}>
-                  <Text style={{ color: theme.fg }}>Today</Text>
+            <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+              <Text style={styles.modalTitle}>Report & Export</Text>
+              <Text style={styles.label}>QUICK RANGES</Text>
+              <View style={styles.quickRanges}>
+                <TouchableOpacity style={styles.rangeChip} onPress={() => { const d = new Date(); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(d.toISOString().split('T')[0]); }}>
+                  <Text style={styles.rangeChipText}>Today</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.chip} onPress={() => { const d = new Date(); d.setDate(1); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(new Date().toISOString().split('T')[0]); }}>
-                  <Text style={{ color: theme.fg }}>This Month</Text>
+                <TouchableOpacity style={styles.rangeChip} onPress={() => { const d = new Date(); d.setDate(1); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(new Date().toISOString().split('T')[0]); }}>
+                  <Text style={styles.rangeChipText}>This Month</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.chip} onPress={() => { const y = new Date().getFullYear(); setReportStartDate(`${y}-01-01`); setReportEndDate(`${y}-12-31`); }}>
-                  <Text style={{ color: theme.fg }}>This Year</Text>
+                <TouchableOpacity style={styles.rangeChip} onPress={() => { const y = new Date().getFullYear(); setReportStartDate(`${y}-01-01`); setReportEndDate(`${y}-12-31`); }}>
+                  <Text style={styles.rangeChipText}>This Year</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.label, { color: theme.fg }]}>Custom Range</Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Text style={styles.label}>CUSTOM RANGE</Text>
+              <View style={styles.dateRange}>
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg, flex: 1 }]}
+                  style={[styles.input, { flex: 1 }]}
                   placeholder="Start"
                   placeholderTextColor={theme.fgMuted}
                   value={reportStartDate}
                   onChangeText={setReportStartDate}
                 />
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg, flex: 1 }]}
+                  style={[styles.input, { flex: 1 }]}
                   placeholder="End"
                   placeholderTextColor={theme.fgMuted}
                   value={reportEndDate}
@@ -588,24 +556,24 @@ export default function App() {
                 />
               </View>
               {reportData.length > 0 && (
-                <View style={[styles.reportBox, { backgroundColor: theme.cardAlt }]}>
+                <View style={styles.reportBox}>
                   {reportData.map(r => (
                     <View key={r.item.id} style={styles.reportRow}>
-                      <Text style={{ color: theme.fg }}>{r.item.icon} {r.item.name}</Text>
-                      <Text style={{ color: theme.fgMuted }}>{r.count}x</Text>
-                      <Text style={{ color: theme.accent }}>{currencySymbol}{r.total.toFixed(2)}</Text>
+                      <Text style={styles.reportItem}>{r.item.icon} {r.item.name}</Text>
+                      <Text style={styles.reportCount}>{r.count}x</Text>
+                      <AmountDisplay amount={r.total} color={theme.accent} />
                     </View>
                   ))}
-                  <View style={[styles.divider, { backgroundColor: theme.fgMuted }]} />
+                  <View style={styles.reportDivider} />
                   <View style={styles.reportRow}>
-                    <Text style={{ color: theme.fg, fontWeight: 'bold' }}>Total</Text>
-                    <Text style={{ color: theme.fgMuted }}>{reportData.reduce((s, r) => s + r.count, 0)} items</Text>
-                    <Text style={{ color: theme.accent, fontWeight: 'bold' }}>{currencySymbol}{reportData.reduce((s, r) => s + r.total, 0).toFixed(2)}</Text>
+                    <Text style={styles.reportTotal}>Total</Text>
+                    <Text style={styles.reportCount}>{reportData.reduce((s, r) => s + r.count, 0)} items</Text>
+                    <AmountDisplay amount={reportData.reduce((s, r) => s + r.total, 0)} color={theme.accent} />
                   </View>
                 </View>
               )}
-              <TouchableOpacity style={[styles.btn, { backgroundColor: theme.accent }]} onPress={handleExport}>
-                <Text style={styles.btnText}>Export CSV</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={handleExport}>
+                <Text style={styles.primaryBtnText}>Export CSV</Text>
               </TouchableOpacity>
             </Pressable>
           </Pressable>
@@ -614,220 +582,133 @@ export default function App() {
     );
   }
 
-  // Report Modal (accessible from both main and settings)
-  const ReportModal = (
-    <Modal visible={showReportModal} transparent animationType="slide">
-      <Pressable style={styles.overlay} onPress={() => setShowReportModal(false)}>
-        <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-          <Text style={[styles.modalTitle, { color: theme.fg }]}>Report & Export</Text>
-          <Text style={[styles.label, { color: theme.fg }]}>Quick Ranges</Text>
-          <View style={styles.chipRow}>
-            <TouchableOpacity style={styles.chip} onPress={() => { const d = new Date(); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(d.toISOString().split('T')[0]); }}>
-              <Text style={{ color: theme.fg }}>Today</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.chip} onPress={() => { const d = new Date(); d.setDate(1); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(new Date().toISOString().split('T')[0]); }}>
-              <Text style={{ color: theme.fg }}>This Month</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.chip} onPress={() => { const y = new Date().getFullYear(); setReportStartDate(`${y}-01-01`); setReportEndDate(`${y}-12-31`); }}>
-              <Text style={{ color: theme.fg }}>This Year</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={[styles.label, { color: theme.fg }]}>Custom Range</Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg, flex: 1 }]}
-              placeholder="Start"
-              placeholderTextColor={theme.fgMuted}
-              value={reportStartDate}
-              onChangeText={setReportStartDate}
-            />
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg, flex: 1 }]}
-              placeholder="End"
-              placeholderTextColor={theme.fgMuted}
-              value={reportEndDate}
-              onChangeText={setReportEndDate}
-            />
-          </View>
-          {reportData.length > 0 && (
-            <View style={[styles.reportBox, { backgroundColor: theme.cardAlt }]}>
-              {reportData.map(r => (
-                <View key={r.item.id} style={styles.reportRow}>
-                  <Text style={{ color: theme.fg }}>{r.item.icon} {r.item.name}</Text>
-                  <Text style={{ color: theme.fgMuted }}>{r.count}x</Text>
-                  <Text style={{ color: theme.accent }}>{currencySymbol}{r.total.toFixed(2)}</Text>
-                </View>
-              ))}
-              <View style={[styles.divider, { backgroundColor: theme.fgMuted }]} />
-              <View style={styles.reportRow}>
-                <Text style={{ color: theme.fg, fontWeight: 'bold' }}>Total</Text>
-                <Text style={{ color: theme.fgMuted }}>{reportData.reduce((s, r) => s + r.count, 0)} items</Text>
-                <Text style={{ color: theme.accent, fontWeight: 'bold' }}>{currencySymbol}{reportData.reduce((s, r) => s + r.total, 0).toFixed(2)}</Text>
-              </View>
-            </View>
-          )}
-          <TouchableOpacity style={[styles.btn, { backgroundColor: theme.accent }]} onPress={handleExport}>
-            <Text style={styles.btnText}>Export CSV</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: theme.cardAlt, marginTop: 8 }]} onPress={() => setShowReportModal(false)}>
-            <Text style={[styles.btnText, { color: theme.fg }]}>Cancel</Text>
-          </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-
-  // Main Dashboard
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={settings.theme === 'dark' ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: theme.fg }]}>BoGa</Text>
-          <Text style={[styles.subtitle, { color: theme.accent }]}>Expense Tracker</Text>
+          <Text style={styles.monthYear}>{MONTHS[selectedMonth]} {selectedYear}</Text>
         </View>
         <TouchableOpacity onPress={() => { lightHaptic(); setMode('settings'); }}>
-          <Text style={{ fontSize: 24 }}>⚙️</Text>
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Month Year Filter */}
       <View style={styles.filterRow}>
-        <TouchableOpacity style={[styles.filterBtn, { backgroundColor: theme.card }]} onPress={() => {
+        <TouchableOpacity style={styles.navBtn} onPress={() => {
           lightHaptic();
           setSelectedMonth(m => m === 0 ? 11 : m - 1);
           if (selectedMonth === 0) setSelectedYear(y => y - 1);
         }}>
-          <Text style={{ color: theme.fg }}>◀</Text>
+          <Text style={styles.navBtnText}>◀</Text>
         </TouchableOpacity>
-        <View style={[styles.filterDisplay, { backgroundColor: theme.card }]}>
-          <Text style={[styles.filterText, { color: theme.fg }]}>{MONTHS[selectedMonth]} {selectedYear}</Text>
-        </View>
-        <TouchableOpacity style={[styles.filterBtn, { backgroundColor: theme.card }]} onPress={() => {
+        <TouchableOpacity style={styles.navBtn} onPress={() => {
           lightHaptic();
           setSelectedMonth(m => m === 11 ? 0 : m + 1);
           if (selectedMonth === 11) setSelectedYear(y => y + 1);
         }}>
-          <Text style={{ color: theme.fg }}>▶</Text>
+          <Text style={styles.navBtnText}>▶</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Summary */}
-      <View style={[styles.summaryCard, { backgroundColor: theme.card }]}>
+      <View style={styles.summaryCard}>
         <View style={styles.summaryItem}>
-          <Text style={[styles.summaryLabel, { color: theme.fgMuted }]}>Unpaid</Text>
-          <Text style={[styles.summaryValue, { color: theme.warning }]}>{currencySymbol}{unpaidCost.toFixed(2)}</Text>
-          <Text style={[styles.summaryCount, { color: theme.fgMuted }]}>{unpaidCount} items</Text>
+          <Text style={styles.summaryLabel}>UNPAID</Text>
+          <AmountDisplay amount={unpaidCost} color={theme.warning} />
+          <Text style={styles.summaryCount}>{unpaidCount} items</Text>
         </View>
-        <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+        <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Text style={[styles.summaryLabel, { color: theme.fgMuted }]}>Paid</Text>
-          <Text style={[styles.summaryValue, { color: theme.success }]}>{currencySymbol}{paidCost.toFixed(2)}</Text>
-          <Text style={[styles.summaryCount, { color: theme.fgMuted }]}>{filteredEntries.filter(e => e.paid).length} items</Text>
+          <Text style={styles.summaryLabel}>PAID</Text>
+          <AmountDisplay amount={paidCost} color={theme.success} />
+          <Text style={styles.summaryCount}>{filteredEntries.filter(e => e.paid).length} items</Text>
         </View>
       </View>
 
-      {/* Item Buttons */}
-      <Text style={[styles.sectionTitle, { color: theme.fg }]}>Tap to Add</Text>
+      <Text style={styles.sectionTitle}>TAP TO ADD</Text>
       <View style={styles.itemsGrid}>
         {items.map(item => (
           <TouchableOpacity
             key={item.id}
-            style={[styles.itemCard, { backgroundColor: theme.card }]}
+            style={styles.itemCard}
             onPress={() => handleItemPress(item)}
+            activeOpacity={0.7}
           >
             <Text style={styles.itemIcon}>{item.icon}</Text>
-            <Text style={[styles.itemName, { color: theme.fg }]}>{item.name}</Text>
-            <Text style={[styles.itemPrice, { color: theme.accent }]}>
-              {item.customPrice ? 'Tap to add' : `${currencySymbol}${getPriceAtTime(item, Date.now()).toFixed(2)}`}
+            <Text style={styles.itemName}>{item.name}</Text>
+            <Text style={styles.itemPrice}>
+              {item.customPrice ? 'Tap to add' : (
+                <AmountDisplay amount={getPriceAtTime(item, Date.now())} color={theme.accent} />
+              )}
             </Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
-          style={[styles.addCard, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}
+          style={styles.addCard}
           onPress={() => setMode('addItem')}
+          activeOpacity={0.7}
         >
-          <Text style={{ fontSize: 24 }}>+</Text>
-          <Text style={{ color: theme.fgMuted, fontSize: 12 }}>Add Item</Text>
+          <Text style={styles.addIcon}>+</Text>
+          <Text style={styles.addText}>Add Item</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Action Buttons */}
       <View style={styles.actionsRow}>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: theme.card }]}
-          onPressIn={() => setShowPayModal(true)}
-        >
-          <Text style={{ fontSize: 16 }}>💳</Text>
-          <Text style={[styles.actionLabel, { color: theme.fg }]}>Pay</Text>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowPayModal(true)} activeOpacity={0.7}>
+          <Text style={styles.actionIcon}>💳</Text>
+          <Text style={styles.actionLabel}>Pay</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: theme.card }]}
-          onPressIn={() => setTimeout(() => setShowDeleteModal(true), 10)}
-        >
-          <Text style={{ fontSize: 16 }}>🗑️</Text>
-          <Text style={[styles.actionLabel, { color: theme.fg }]}>Delete</Text>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.7}>
+          <Text style={styles.actionIcon}>🗑️</Text>
+          <Text style={styles.actionLabel}>Delete</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: theme.card }]}
-          onPressIn={() => {
-            console.log('Report button pressed, showReportModal:', showReportModal);
-            setTimeout(() => {
-              console.log('Setting showReportModal to true');
-              setShowReportModal(true);
-            }, 10);
-          }}
-        >
-          <Text style={{ fontSize: 16 }}>📊</Text>
-          <Text style={[styles.actionLabel, { color: theme.fg }]}>Report</Text>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowReportModal(true)} activeOpacity={0.7}>
+          <Text style={styles.actionIcon}>📊</Text>
+          <Text style={styles.actionLabel}>Report</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Entries List */}
-      <Text style={[styles.sectionTitle, { color: theme.fg }]}>Recent Entries</Text>
-      <View style={styles.entriesContainer}>
-        <ScrollView style={styles.entriesList} showsVerticalScrollIndicator={true}>
-          {filteredEntries.length === 0 ? (
+      <Text style={styles.sectionTitle}>ENTRIES</Text>
+      <ScrollView style={styles.entriesList} showsVerticalScrollIndicator={false}>
+        {filteredEntries.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={{ fontSize: 32 }}>📝</Text>
-            <Text style={{ color: theme.fgMuted }}>No entries this month</Text>
+            <Text style={styles.emptyIcon}>📝</Text>
+            <Text style={styles.emptyText}>No entries this month</Text>
           </View>
         ) : (
-          filteredEntries.slice(0, 20).map(entry => {
+          filteredEntries.slice(0, 20).map((entry, index) => {
             const item = items.find(i => i.id === entry.itemId);
             return (
               <TouchableOpacity
                 key={entry.id}
-                style={[styles.entryCard, { backgroundColor: theme.card, opacity: entry.paid ? 0.6 : 1 }]}
+                style={styles.entryItem}
                 onPress={() => togglePaid(entry.id)}
                 onLongPress={() => deleteEntry(entry.id)}
+                activeOpacity={0.7}
               >
-                <View style={styles.entryLeft}>
+                <View style={styles.entryRow}>
                   <Text style={styles.entryIcon}>{item?.icon}</Text>
-                  <View>
-                    <Text style={[styles.entryName, { color: theme.fg }]}>{item?.name} {entry.paid && '✅'}</Text>
-                    <Text style={[styles.entryDate, { color: theme.fgMuted }]}>
+                  <View style={styles.entryInfo}>
+                    <Text style={styles.entryName}>{item?.name}</Text>
+                    <Text style={styles.entryDate}>
                       {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </Text>
                   </View>
+                  <AmountDisplay amount={entry.priceAtTime} color={entry.paid ? theme.success : theme.warning} />
                 </View>
-                <Text style={[styles.entryPrice, { color: entry.paid ? theme.success : theme.warning }]}>
-                  {currencySymbol}{entry.priceAtTime.toFixed(2)}
-                </Text>
+                {index < Math.min(filteredEntries.length, 20) - 1 && <View style={styles.separator} />}
               </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
-      </View>
 
-      {/* Pay Modal */}
       <Modal visible={showPayModal} transparent animationType="slide">
         <Pressable style={styles.overlay} onPress={() => setShowPayModal(false)}>
-          <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { color: theme.fg }]}>Select Items to Pay</Text>
-            <ScrollView style={[styles.modalList, { backgroundColor: theme.cardAlt }]}>
+          <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Select Items to Pay</Text>
+            <ScrollView style={styles.modalList}>
               {filteredEntries.filter(e => !e.paid).map(entry => {
                 const item = items.find(i => i.id === entry.itemId);
                 const selected = selectedEntries.includes(entry.id);
@@ -836,46 +717,41 @@ export default function App() {
                     key={entry.id}
                     style={[styles.modalItem, selected && { backgroundColor: theme.accent }]}
                     onPress={() => toggleSelectEntry(entry.id)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={{ color: selected ? '#FFF' : theme.fg, marginRight: 10 }}>
-                      {selected ? '☑️' : '⬜'}
-                    </Text>
-                    <Text style={{ color: selected ? '#FFF' : theme.fg, flex: 1 }}>{item?.icon} {item?.name}</Text>
-                    <Text style={{ color: selected ? '#FFF' : theme.fgMuted }}>{currencySymbol}{entry.priceAtTime.toFixed(2)}</Text>
+                    <Text style={styles.checkmark}>{selected ? '☑️' : '⬜'}</Text>
+                    <Text style={[styles.modalItemName, selected && styles.selectedText]}>{item?.icon} {item?.name}</Text>
+                    <AmountDisplay amount={entry.priceAtTime} color={selected ? '#FFF' : theme.fgMuted} />
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <View style={[styles.modalTotal, { backgroundColor: theme.cardAlt }]}>
-              <Text style={{ color: theme.fg }}>Selected: {selectedEntries.length}</Text>
-              <Text style={{ color: theme.accent, fontWeight: 'bold' }}>{currencySymbol}{getSelectedCost().toFixed(2)}</Text>
+            <View style={styles.modalTotal}>
+              <Text style={styles.modalTotalText}>Selected: {selectedEntries.length}</Text>
+              <AmountDisplay amount={getSelectedCost()} color={theme.accent} />
             </View>
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: theme.cardAlt }]}
-                onPress={() => { setShowPayModal(false); setSelectedEntries([]); }}
-              >
-                <Text style={{ color: theme.fg }}>Cancel</Text>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setShowPayModal(false); setSelectedEntries([]); }}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: theme.accent, opacity: selectedEntries.length ? 1 : 0.5 }]}
+              <TouchableOpacity 
+                style={[styles.primaryBtn, { opacity: selectedEntries.length ? 1 : 0.5 }]} 
                 onPress={markSelectedPaid}
                 disabled={!selectedEntries.length}
               >
-                <Text style={{ color: '#FFF' }}>Mark Paid</Text>
+                <Text style={styles.primaryBtnText}>Mark Paid</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* Delete Modal */}
       <Modal visible={showDeleteModal} transparent animationType="slide">
         <Pressable style={styles.overlay} onPress={() => setShowDeleteModal(false)}>
-          <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { color: theme.fg }]}>Delete Options</Text>
+          <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Delete Options</Text>
             <TouchableOpacity
-              style={[styles.deleteOption, { backgroundColor: theme.cardAlt }]}
+              style={styles.deleteOption}
               onPress={() => {
                 const unpaid = filteredEntries.filter(e => !e.paid);
                 if (unpaid.length === 0) {
@@ -886,44 +762,99 @@ export default function App() {
                 setShowDeleteModal(false);
                 setShowPayModal(true);
               }}
+              activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 20 }}>☑️</Text>
-              <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text style={{ color: theme.fg, fontWeight: '600' }}>Select & Delete</Text>
-                <Text style={{ color: theme.fgMuted, fontSize: 12 }}>Select specific unpaid items to delete</Text>
+              <Text style={styles.deleteIcon}>☑️</Text>
+              <View style={styles.deleteInfo}>
+                <Text style={styles.deleteTitle}>Select & Delete</Text>
+                <Text style={styles.deleteSubtitle}>Select specific unpaid items to delete</Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.deleteOption, { backgroundColor: theme.destructive + '20' }]}
+              style={[styles.deleteOption, { borderColor: theme.destructive }]}
               onPress={deleteUnpaidAll}
+              activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 20 }}>🗑️</Text>
-              <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text style={{ color: theme.destructive, fontWeight: '600' }}>Delete All Unpaid</Text>
-                <Text style={{ color: theme.fgMuted, fontSize: 12 }}>Remove all unpaid entries for {MONTHS[selectedMonth]} {selectedYear}</Text>
+              <Text style={styles.deleteIcon}>🗑️</Text>
+              <View style={styles.deleteInfo}>
+                <Text style={[styles.deleteTitle, { color: theme.destructive }]}>Delete All Unpaid</Text>
+                <Text style={styles.deleteSubtitle}>Remove all unpaid entries for {MONTHS[selectedMonth]} {selectedYear}</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: theme.cardAlt, marginTop: 10 }]}
-              onPress={() => setShowDeleteModal(false)}
-            >
-              <Text style={{ color: theme.fg }}>Cancel</Text>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowDeleteModal(false)}>
+              <Text style={styles.secondaryBtnText}>Cancel</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* Report Modal */}
-      {ReportModal}
+      <Modal visible={showReportModal} transparent animationType="slide">
+        <Pressable style={styles.overlay} onPress={() => setShowReportModal(false)}>
+          <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Report & Export</Text>
+            <Text style={styles.label}>QUICK RANGES</Text>
+            <View style={styles.quickRanges}>
+              <TouchableOpacity style={styles.rangeChip} onPress={() => { const d = new Date(); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(d.toISOString().split('T')[0]); }}>
+                <Text style={styles.rangeChipText}>Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.rangeChip} onPress={() => { const d = new Date(); d.setDate(1); setReportStartDate(d.toISOString().split('T')[0]); setReportEndDate(new Date().toISOString().split('T')[0]); }}>
+                <Text style={styles.rangeChipText}>This Month</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.rangeChip} onPress={() => { const y = new Date().getFullYear(); setReportStartDate(`${y}-01-01`); setReportEndDate(`${y}-12-31`); }}>
+                <Text style={styles.rangeChipText}>This Year</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.label}>CUSTOM RANGE</Text>
+            <View style={styles.dateRange}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Start"
+                placeholderTextColor={theme.fgMuted}
+                value={reportStartDate}
+                onChangeText={setReportStartDate}
+              />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="End"
+                placeholderTextColor={theme.fgMuted}
+                value={reportEndDate}
+                onChangeText={setReportEndDate}
+              />
+            </View>
+            {reportData.length > 0 && (
+              <View style={styles.reportBox}>
+                {reportData.map(r => (
+                  <View key={r.item.id} style={styles.reportRow}>
+                    <Text style={styles.reportItem}>{r.item.icon} {r.item.name}</Text>
+                    <Text style={styles.reportCount}>{r.count}x</Text>
+                    <AmountDisplay amount={r.total} color={theme.accent} />
+                  </View>
+                ))}
+                <View style={styles.reportDivider} />
+                <View style={styles.reportRow}>
+                  <Text style={styles.reportTotal}>Total</Text>
+                  <Text style={styles.reportCount}>{reportData.reduce((s, r) => s + r.count, 0)} items</Text>
+                  <AmountDisplay amount={reportData.reduce((s, r) => s + r.total, 0)} color={theme.accent} />
+                </View>
+              </View>
+            )}
+            <TouchableOpacity style={styles.primaryBtn} onPress={handleExport}>
+              <Text style={styles.primaryBtnText}>Export CSV</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowReportModal(false)}>
+              <Text style={styles.secondaryBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
-      {/* Custom Price Modal */}
       <Modal visible={showCustomPriceModal} transparent animationType="slide">
         <Pressable style={styles.overlay} onPress={() => setShowCustomPriceModal(false)}>
-          <Pressable style={[styles.modal, { backgroundColor: theme.card }]} onPress={e => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { color: theme.fg }]}>Add {customPriceItem?.name}</Text>
-            <Text style={[styles.label, { color: theme.fg }]}>Amount ({settings.currency})</Text>
+          <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Add {customPriceItem?.name}</Text>
+            <Text style={styles.label}>AMOUNT ({settings.currency})</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.cardAlt, color: theme.fg }]}
+              style={styles.input}
               placeholder="Enter amount"
               placeholderTextColor={theme.fgMuted}
               value={customPriceAmount}
@@ -932,23 +863,17 @@ export default function App() {
               autoFocus
             />
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: theme.cardAlt }]}
-                onPress={() => setShowCustomPriceModal(false)}
-              >
-                <Text style={{ color: theme.fg }}>Cancel</Text>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowCustomPriceModal(false)}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: theme.accent }]}
-                onPress={() => {
-                  if (customPriceItem && customPriceAmount) {
-                    addEntry(customPriceItem.id, parseFloat(customPriceAmount));
-                    setShowCustomPriceModal(false);
-                    setCustomPriceAmount('');
-                  }
-                }}
-              >
-                <Text style={{ color: '#FFF' }}>Add</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => {
+                if (customPriceItem && customPriceAmount) {
+                  addEntry(customPriceItem.id, parseFloat(customPriceAmount));
+                  setShowCustomPriceModal(false);
+                  setCustomPriceAmount('');
+                }
+              }}>
+                <Text style={styles.primaryBtnText}>Add</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -959,67 +884,538 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centerScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  content: { flex: 1, padding: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 },
-  backBtn: { fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  title: { fontSize: 28, fontWeight: '700' },
-  subtitle: { fontSize: 14, marginTop: -4 },
-  logo: { fontSize: 48, marginBottom: 20 },
-  input: { width: '100%', padding: 14, borderRadius: 10, fontSize: 15, borderWidth: 1, marginBottom: 12 },
-  btn: { width: '100%', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 8 },
-  btnText: { fontSize: 15, fontWeight: '600', color: '#FFF' },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12, marginTop: 16 },
-  setCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, marginBottom: 8 },
-  setLabel: { fontSize: 14 },
-  setLabelSmall: { fontSize: 12 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#334155' },
-  chipText: { fontSize: 13 },
-  iconPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  iconBtn: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#334155' },
-  iconText: { fontSize: 22 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 12 },
-  filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  filterDisplay: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
-  filterText: { fontSize: 16, fontWeight: '600' },
-  summaryCard: { flexDirection: 'row', borderRadius: 12, padding: 16, marginHorizontal: 20, marginBottom: 16 },
-  summaryItem: { flex: 1, alignItems: 'center' },
-  summaryDivider: { width: 1, marginHorizontal: 16 },
-  summaryLabel: { fontSize: 12, marginBottom: 4 },
-  summaryValue: { fontSize: 20, fontWeight: '700' },
-  summaryCount: { fontSize: 11 },
-  itemsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 10 },
-  itemCard: { width: '47%', borderRadius: 14, padding: 16, alignItems: 'center' },
-  itemIcon: { fontSize: 28, marginBottom: 6 },
-  itemName: { fontSize: 13, fontWeight: '600' },
-  itemPrice: { fontSize: 14, fontWeight: '700', marginTop: 4 },
-  addCard: { width: '47%', borderRadius: 14, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed' },
-  actionsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 10, marginTop: 16 },
-  actionBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
-  actionLabel: { fontSize: 12, marginTop: 4 },
-  entriesList: { flex: 1, paddingHorizontal: 20, maxHeight: 300 },
-  entriesContainer: { height: 300, paddingHorizontal: 20 },
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  entryCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 10, padding: 12, marginBottom: 6 },
-  entryLeft: { flexDirection: 'row', alignItems: 'center' },
-  entryIcon: { fontSize: 22, marginRight: 10 },
-  entryName: { fontSize: 14, fontWeight: '600' },
-  entryDate: { fontSize: 11, marginTop: 2 },
-  entryPrice: { fontSize: 15, fontWeight: '600' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  modal: { borderRadius: 18, padding: 18, width: '100%', maxWidth: 340 },
-  modalTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 14 },
-  modalList: { maxHeight: 200, borderRadius: 10, padding: 8, marginBottom: 10 },
-  modalItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, marginBottom: 4 },
-  modalTotal: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: 10, marginBottom: 10 },
-  modalButtons: { flexDirection: 'row', gap: 10 },
-  modalBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
-  deleteOption: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 10, marginBottom: 8 },
-  reportBox: { borderRadius: 10, padding: 12, marginBottom: 12 },
-  reportRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  divider: { height: 1, marginVertical: 8 },
+  container: { 
+    flex: 1, 
+    backgroundColor: theme.bg,
+    paddingHorizontal: 24,
+  },
+  content: { 
+    flex: 1, 
+    paddingHorizontal: 24,
+  },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  monthYear: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: theme.fg,
+    letterSpacing: 0.37,
+  },
+  settingsIcon: {
+    fontSize: 24,
+    opacity: 0.7,
+  },
+  backBtn: { 
+    fontSize: 17,
+    color: theme.accent,
+    fontWeight: '400',
+  },
+  headerTitle: { 
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.fg,
+  },
+  filterRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 12,
+  },
+  navBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navBtnText: {
+    fontSize: 18,
+    color: theme.fg,
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    padding: 20,
+    marginBottom: 24,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryDivider: {
+    width: 0.5,
+    backgroundColor: theme.cardBorder,
+    marginHorizontal: 16,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.fgMuted,
+    letterSpacing: 0.05,
+    marginBottom: 8,
+  },
+  summaryCount: {
+    fontSize: 13,
+    color: theme.fgMuted,
+    marginTop: 4,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  currencySymbol: {
+    fontSize: 17,
+    fontWeight: '600',
+    opacity: 0.8,
+    marginRight: 2,
+  },
+  amountValue: {
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.fgMuted,
+    letterSpacing: 0.05,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  itemsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  itemCard: {
+    width: '47%',
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    padding: 16,
+    alignItems: 'center',
+  },
+  itemIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  itemName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: theme.fg,
+    marginBottom: 4,
+  },
+  itemPrice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addCard: {
+    width: '47%',
+    height: 120,
+    borderRadius: 16,
+    backgroundColor: theme.cardAlt,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addIcon: {
+    fontSize: 28,
+    color: theme.fgMuted,
+  },
+  addText: {
+    fontSize: 13,
+    color: theme.fgMuted,
+    marginTop: 4,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+  },
+  actionIcon: {
+    fontSize: 16,
+  },
+  actionLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.fg,
+  },
+  entriesList: {
+    flex: 1,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: theme.fgMuted,
+  },
+  entryItem: {
+    paddingVertical: 14,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  entryIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  entryInfo: {
+    flex: 1,
+  },
+  entryName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: theme.fg,
+  },
+  entryDate: {
+    fontSize: 13,
+    color: theme.fgMuted,
+    marginTop: 2,
+  },
+  separator: {
+    height: 0.5,
+    backgroundColor: theme.cardBorder,
+    marginLeft: 48,
+    marginTop: 14,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modal: {
+    backgroundColor: theme.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.fg,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+    color: theme.fgMuted,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalList: {
+    maxHeight: 240,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  checkmark: {
+    fontSize: 16,
+    marginRight: 10,
+  },
+  modalItemName: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.fg,
+  },
+  selectedText: {
+    color: '#FFF',
+  },
+  modalTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: theme.cardAlt,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  modalTotalText: {
+    fontSize: 15,
+    color: theme.fg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  primaryBtn: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  secondaryBtn: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.cardAlt,
+    alignItems: 'center',
+  },
+  secondaryBtnText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.fg,
+  },
+  deleteOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: theme.cardAlt,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  deleteIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  deleteInfo: {
+    flex: 1,
+  },
+  deleteTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.fg,
+  },
+  deleteSubtitle: {
+    fontSize: 13,
+    color: theme.fgMuted,
+    marginTop: 2,
+  },
+  lockScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  lockIcon: {
+    fontSize: 56,
+    marginBottom: 16,
+  },
+  lockTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: theme.fg,
+    marginBottom: 32,
+  },
+  lockInput: {
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    fontSize: 17,
+    color: theme.fg,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  lockBtn: {
+    width: '100%',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+  },
+  lockBtnText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.fgMuted,
+    letterSpacing: 0.05,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  input: {
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: theme.cardAlt,
+    fontSize: 17,
+    color: theme.fg,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+  },
+  iconPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: theme.cardAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconText: {
+    fontSize: 24,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    marginTop: 16,
+  },
+  switchLabel: {
+    fontSize: 15,
+    color: theme.fg,
+  },
+  card: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    marginBottom: 8,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cardLabel: {
+    fontSize: 15,
+    color: theme.fg,
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  editLink: {
+    fontSize: 15,
+    color: theme.accent,
+    fontWeight: '500',
+  },
+  currencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  currencyChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: theme.card,
+  },
+  currencyChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  helperText: {
+    fontSize: 12,
+    color: theme.fgMuted,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  quickRanges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  rangeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: theme.cardAlt,
+  },
+  rangeChipText: {
+    fontSize: 13,
+    color: theme.fg,
+  },
+  dateRange: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  reportBox: {
+    backgroundColor: theme.cardAlt,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  reportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  reportItem: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.fg,
+  },
+  reportCount: {
+    fontSize: 13,
+    color: theme.fgMuted,
+    marginHorizontal: 12,
+  },
+  reportDivider: {
+    height: 0.5,
+    backgroundColor: theme.cardBorder,
+    marginVertical: 8,
+  },
+  reportTotal: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.fg,
+  },
 });
