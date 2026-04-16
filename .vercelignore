@@ -1,0 +1,16 @@
+# Dependencies
+node_modules
+
+# Expo/Vercel config
+.expo
+.vercelignore
+.ruff_cache
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local testing
+test_*.py
+scripts/
