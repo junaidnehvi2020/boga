@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Pressable, TextInput, Switch, Alert, SafeAreaView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -78,6 +78,7 @@ export default function App() {
   
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
+  const itemsScrollRef = useRef<ScrollView>(null);
   const [editItemIcon, setEditItemIcon] = useState('📦');
   const [showItemEditor, setShowItemEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -318,10 +319,10 @@ export default function App() {
     }).filter(r => r.count > 0);
   }, [reportStartDate, reportEndDate, entries, items]);
 
-  const AmountDisplay = ({ amount, color }: { amount: number; color: string }) => (
+  const AmountDisplay = ({ amount, color, dimmed = false }: { amount: number; color: string; dimmed?: boolean }) => (
     <View style={styles.amountRow}>
-      <Text style={[styles.currencySymbol, { color }]}>{currencySymbol}</Text>
-      <Text style={[styles.amountValue, { color }]}>{amount.toFixed(2)}</Text>
+      <Text style={[styles.currencySymbol, { color, opacity: dimmed ? 0.4 : 0.8 }]}>{currencySymbol}</Text>
+      <Text style={[styles.amountValue, { color, opacity: dimmed ? 0.4 : 1 }]}>{amount.toFixed(2)}</Text>
     </View>
   );
 
@@ -587,122 +588,147 @@ export default function App() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.headerNavBtn} onPress={() => {
+            lightHaptic();
+            setSelectedMonth(m => m === 0 ? 11 : m - 1);
+            if (selectedMonth === 0) setSelectedYear(y => y - 1);
+          }}>
+            <Text style={styles.headerNavText}>◀</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.headerCenter}>
           <Text style={styles.monthYear}>{MONTHS[selectedMonth]} {selectedYear}</Text>
         </View>
-        <TouchableOpacity onPress={() => { lightHaptic(); setMode('settings'); }}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.filterRow}>
-        <TouchableOpacity style={styles.navBtn} onPress={() => {
-          lightHaptic();
-          setSelectedMonth(m => m === 0 ? 11 : m - 1);
-          if (selectedMonth === 0) setSelectedYear(y => y - 1);
-        }}>
-          <Text style={styles.navBtnText}>◀</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => {
-          lightHaptic();
-          setSelectedMonth(m => m === 11 ? 0 : m + 1);
-          if (selectedMonth === 11) setSelectedYear(y => y + 1);
-        }}>
-          <Text style={styles.navBtnText}>▶</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>UNPAID</Text>
-          <AmountDisplay amount={unpaidCost} color={theme.warning} />
-          <Text style={styles.summaryCount}>{unpaidCount} items</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>PAID</Text>
-          <AmountDisplay amount={paidCost} color={theme.success} />
-          <Text style={styles.summaryCount}>{filteredEntries.filter(e => e.paid).length} items</Text>
+        
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerNavBtn} onPress={() => {
+            lightHaptic();
+            setSelectedMonth(m => m === 11 ? 0 : m + 1);
+            if (selectedMonth === 11) setSelectedYear(y => y + 1);
+          }}>
+            <Text style={styles.headerNavText}>▶</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { lightHaptic(); setMode('settings'); }}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>TAP TO ADD</Text>
-      <View style={styles.itemsGrid}>
-        {items.map(item => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.itemCard}
-            onPress={() => handleItemPress(item)}
+      <View style={styles.mainContent}>
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>UNPAID</Text>
+            <AmountDisplay amount={unpaidCost} color={theme.warning} dimmed={unpaidCost === 0} />
+            <Text style={styles.summaryCount}>{unpaidCount} items</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>PAID</Text>
+            <AmountDisplay amount={paidCost} color={theme.success} dimmed={paidCost === 0} />
+            <Text style={styles.summaryCount}>{filteredEntries.filter(e => e.paid).length} items</Text>
+          </View>
+        </View>
+
+        <View style={styles.itemsRow}>
+          <TouchableOpacity 
+            style={styles.scrollArrowBtn} 
+            onPress={() => itemsScrollRef.current?.scrollTo({ x: 0, animated: true })}
             activeOpacity={0.7}
           >
-            <Text style={styles.itemIcon}>{item.icon}</Text>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemPrice}>
-              {item.customPrice ? 'Tap to add' : (
-                <AmountDisplay amount={getPriceAtTime(item, Date.now())} color={theme.accent} />
-              )}
-            </Text>
+            <Text style={styles.scrollArrowText}>◀</Text>
           </TouchableOpacity>
-        ))}
-        <TouchableOpacity
-          style={styles.addCard}
-          onPress={() => setMode('addItem')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.addIcon}>+</Text>
-          <Text style={styles.addText}>Add Item</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowPayModal(true)} activeOpacity={0.7}>
-          <Text style={styles.actionIcon}>💳</Text>
-          <Text style={styles.actionLabel}>Pay</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.7}>
-          <Text style={styles.actionIcon}>🗑️</Text>
-          <Text style={styles.actionLabel}>Delete</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowReportModal(true)} activeOpacity={0.7}>
-          <Text style={styles.actionIcon}>📊</Text>
-          <Text style={styles.actionLabel}>Report</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>ENTRIES</Text>
-      <ScrollView style={styles.entriesList} showsVerticalScrollIndicator={false}>
-        {filteredEntries.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📝</Text>
-            <Text style={styles.emptyText}>No entries this month</Text>
-          </View>
-        ) : (
-          filteredEntries.slice(0, 20).map((entry, index) => {
-            const item = items.find(i => i.id === entry.itemId);
-            return (
+          <ScrollView 
+            ref={itemsScrollRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.itemsScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {items.map(item => (
               <TouchableOpacity
-                key={entry.id}
-                style={styles.entryItem}
-                onPress={() => togglePaid(entry.id)}
-                onLongPress={() => deleteEntry(entry.id)}
+                key={item.id}
+                style={styles.itemCard}
+                onPress={() => handleItemPress(item)}
                 activeOpacity={0.7}
               >
-                <View style={styles.entryRow}>
-                  <Text style={styles.entryIcon}>{item?.icon}</Text>
-                  <View style={styles.entryInfo}>
-                    <Text style={styles.entryName}>{item?.name}</Text>
-                    <Text style={styles.entryDate}>
-                      {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                  <AmountDisplay amount={entry.priceAtTime} color={entry.paid ? theme.success : theme.warning} />
-                </View>
-                {index < Math.min(filteredEntries.length, 20) - 1 && <View style={styles.separator} />}
+                <Text style={styles.itemIcon}>{item.icon}</Text>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemPrice}>
+                  {item.customPrice ? 'Tap to add' : (
+                    <AmountDisplay amount={getPriceAtTime(item, Date.now())} color={theme.accent} />
+                  )}
+                </Text>
               </TouchableOpacity>
-            );
-          })
-        )}
-      </ScrollView>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.addCard}
+            onPress={() => setMode('addItem')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addIcon}>+</Text>
+            <Text style={styles.addText}>Add Item</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.scrollArrowBtn}
+            onPress={() => itemsScrollRef.current?.scrollToEnd({ animated: true })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.scrollArrowText}>▶</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setShowPayModal(true)} activeOpacity={0.7}>
+            <Text style={styles.actionIcon}>💳</Text>
+            <Text style={styles.actionLabel}>Pay</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.7}>
+            <Text style={styles.actionIcon}>🗑️</Text>
+            <Text style={styles.actionLabel}>Delete</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setShowReportModal(true)} activeOpacity={0.7}>
+            <Text style={styles.actionIcon}>📊</Text>
+            <Text style={styles.actionLabel}>Report</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.entriesList} showsVerticalScrollIndicator={false}>
+          {filteredEntries.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📝</Text>
+              <Text style={styles.emptyText}>No entries this month</Text>
+            </View>
+          ) : (
+            filteredEntries.slice(0, 20).map((entry, index) => {
+              const item = items.find(i => i.id === entry.itemId);
+              return (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.entryItem}
+                  onPress={() => togglePaid(entry.id)}
+                  onLongPress={() => deleteEntry(entry.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.entryRow}>
+                    <Text style={styles.entryIcon}>{item?.icon}</Text>
+                    <View style={styles.entryInfo}>
+                      <Text style={styles.entryName}>{item?.name}</Text>
+                      <Text style={styles.entryDate}>
+                        {new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <AmountDisplay amount={entry.priceAtTime} color={entry.paid ? theme.success : theme.warning} />
+                  </View>
+                  {index < Math.min(filteredEntries.length, 20) - 1 && <View style={styles.separator} />}
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
 
       <Modal visible={showPayModal} transparent animationType="slide">
         <Pressable style={styles.overlay} onPress={() => setShowPayModal(false)}>
@@ -897,11 +923,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    width: 40,
+    alignItems: 'flex-start',
+  },
+  headerNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerNavText: {
+    fontSize: 14,
+    color: theme.fg,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerRight: {
+    width: 80,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   monthYear: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '700',
     color: theme.fg,
     letterSpacing: 0.37,
@@ -940,15 +995,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: theme.fg,
   },
-  summaryCard: {
-    flexDirection: 'row',
-    borderRadius: 16,
-    backgroundColor: theme.card,
-    borderWidth: 0.5,
-    borderColor: theme.cardBorder,
-    padding: 20,
-    marginBottom: 24,
-  },
   summaryItem: {
     flex: 1,
     alignItems: 'center',
@@ -975,13 +1021,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   currencySymbol: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '600',
     opacity: 0.8,
     marginRight: 2,
   },
   amountValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
   },
   sectionTitle: {
@@ -996,15 +1042,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-  },
-  itemCard: {
-    width: '47%',
-    borderRadius: 16,
-    backgroundColor: theme.card,
-    borderWidth: 0.5,
-    borderColor: theme.cardBorder,
-    padding: 16,
-    alignItems: 'center',
   },
   itemIcon: {
     fontSize: 32,
@@ -1021,19 +1058,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addCard: {
-    width: '47%',
-    height: 120,
+    width: 200,
+    height: 220,
     borderRadius: 16,
-    backgroundColor: theme.cardAlt,
-    borderWidth: 1,
-    borderColor: theme.cardBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 12,
   },
   addIcon: {
-    fontSize: 28,
+    fontSize: 36,
     color: theme.fgMuted,
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   addText: {
     fontSize: 13,
@@ -1065,9 +1106,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: theme.fg,
-  },
-  entriesList: {
-    flex: 1,
   },
   emptyState: {
     alignItems: 'center',
@@ -1111,13 +1149,73 @@ const styles = StyleSheet.create({
     marginLeft: 48,
     marginTop: 14,
   },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  summaryCard: {
+    flex: 0.75,
+    minHeight: 60,
+    flexDirection: 'row',
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 0.5,
+    borderColor: theme.cardBorder,
+    padding: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  itemsRow: {
+    flex: 2,
+    minHeight: 260,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  itemsScrollContent: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scrollArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.4,
+    zIndex: 100,
+  },
+  scrollArrowText: {
+    fontSize: 14,
+    color: theme.fg,
+  },
+  itemCard: {
+    width: 200,
+    height: 220,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  entriesList: {
+    flex: 8,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: theme.card,
+    backgroundColor: '#121212',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
